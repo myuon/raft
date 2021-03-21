@@ -26,7 +26,7 @@ fun is_request where
   "is_request r = (\<not> is_response r)"
 
 datatype message
-  = message (sender: node) (receiver: node) (payload: message_payload) (election_term: election_term)
+  = message (sender: node) (receiver: node) (payload: message_payload) (sender_term: election_term)
 
 fun payload_respond_to where
   "payload_respond_to (append_entry_response _) (append_entry _ _ _) = True"
@@ -40,7 +40,7 @@ definition respond_to where
     \<and> sender req = receiver resp
     \<and> sender resp = receiver req
     \<and> payload_respond_to (payload resp) (payload req)
-    \<and> election_term resp = election_term req)"
+    \<and> sender_term resp = sender_term req)"
 
 datatype node_state = follower | candidate | leader
 
@@ -57,8 +57,20 @@ record server_state =
   lastApplied :: nat
 
   (* Volatile state on leaders *)
-  nextIndex :: "nat list"
-  matchIndex :: "nat list"
+  nextIndex :: "log_index list"
+  matchIndex :: "log_index list"
+
+definition initial_server_state where
+  "initial_server_state n = \<lparr>
+    state = follower,
+    currentTerm = election_term 0,
+    votedFor = None,
+    log = [],
+    commitIndex = 0,
+    lastApplied = 0,
+    nextIndex = repeat (log_index 0) n,
+    matchIndex = repeat (log_index 0) n
+  \<rparr>"
 
 definition ExReq where
   "ExReq resp P \<equiv> Ex (\<lambda>req. P req \<and> respond_to req resp)"
@@ -68,7 +80,7 @@ TR_request_vote_resp:
   "\<lbrakk> resp = message s (node r) (request_vote_response vg) t
   ; ExReq resp (\<lambda>req. \<exists>candidateId lastLogIndex lastLogTerm. payload req = request_vote candidateId lastLogIndex lastLogTerm 
     \<and> req \<in> ms
-    \<and> vg = (if election_term req < currentTerm (\<sigma> ! r) then False
+    \<and> vg = (if sender_term req < currentTerm (\<sigma> ! r) then False
             else (votedFor (\<sigma> ! r) = None \<or> votedFor (\<sigma> ! r) = Some candidateId) \<and> log_up_to_date (log (\<sigma> ! r)) lastLogIndex lastLogTerm)
     \<and> \<sigma>' ! r = (\<sigma> ! m) \<lparr> votedFor := Some s \<rparr>) \<rbrakk>
   \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms \<union> {resp})"
@@ -80,7 +92,7 @@ TR_request_vote_resp:
   "\<lbrakk> resp = message s (node r) (append_entry_response success) t
   ; ExReq resp (\<lambda>req. \<exists>leadersLog. payload req = append_entry _ _ leadersLog
     \<and> req \<in> ms
-    \<and> success = (if election_term req < currentTerm (\<sigma> ! r) then False
+    \<and> success = (if sender_term req < currentTerm (\<sigma> ! r) then False
                  else if \<not> log_up_to_date (log (\<sigma> ! r)) prevLogIndex prevLogTerm then False
                  else True)
     \<and> \<sigma>' ! r = (\<sigma> ! m) \<lparr> log := leadersLog \<rparr>) \<rbrakk>
