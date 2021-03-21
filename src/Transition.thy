@@ -98,4 +98,10 @@ TR_request_vote_resp:
     \<and> \<sigma>' ! r = (\<sigma> ! m) \<lparr> log := leadersLog \<rparr>) \<rbrakk>
   \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms \<union> {resp})"
 
+lemma transition_message_monotonicity: "transition (\<sigma>, m) (\<sigma>', m') \<Longrightarrow> m \<subseteq> m'"
+  apply (induct rule: transition.induct)
+  apply (simp add: ExReq_def respond_to_def)
+  apply (simp add: ExReq_def respond_to_def)
+  done
+
 end
