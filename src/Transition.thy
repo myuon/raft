@@ -1,38 +1,25 @@
 theory Transition
-  imports Main
+  imports Main "./Definitions" "./Log"
 begin
-
-datatype election_term = election_term (election_term_of: nat)
-
-instantiation election_term :: ord
-begin
-
-definition
-  "i < j \<longleftrightarrow> election_term_of i < election_term_of j"
-
-instance ..
-
-end
-
-typedecl entry
-datatype log_index = log_index (log_index_of: nat)
-
-datatype node = node (node_of: nat)
 
 datatype message_payload
   = append_entry
+    (* leaderId *) node
+    (* leaderCommit *) log_index
+    (* leaderLog *) log
   | request_vote
     (* candidateid *) node
     (* lastLogIndex *) log_index
     (* lastLogTerm *) election_term
   | append_entry_response
+    (* success *) bool
   | request_vote_response
     (* voteGranted *) bool
 
 primrec is_response where
-  "is_response append_entry = False"
+  "is_response (append_entry _ _ _) = False"
 | "is_response (request_vote _ _ _) = False"
-| "is_response append_entry_response = True"
+| "is_response (append_entry_response _) = True"
 | "is_response (request_vote_response _) = True"
 
 fun is_request where
@@ -42,7 +29,7 @@ datatype message
   = message (sender: node) (receiver: node) (payload: message_payload) (election_term: election_term)
 
 fun payload_respond_to where
-  "payload_respond_to append_entry_response append_entry = True"
+  "payload_respond_to (append_entry_response _) (append_entry _ _ _) = True"
 | "payload_respond_to (request_vote_response _) (request_vote _ _ _) = True"
 | "payload_respond_to _ _ = False"
 
@@ -56,11 +43,6 @@ definition respond_to where
     \<and> election_term resp = election_term req)"
 
 datatype node_state = follower | candidate | leader
-
-type_synonym log = "(entry \<times> election_term) list"
-
-definition log_up_to_date where
-  "log_up_to_date log index trm \<equiv> length log \<ge> (log_index_of index) \<and> snd (log ! (log_index_of index)) = trm"
 
 record server_state =
   state :: node_state
@@ -87,7 +69,21 @@ TR_request_vote_resp:
   ; ExReq resp (\<lambda>req. \<exists>candidateId lastLogIndex lastLogTerm. payload req = request_vote candidateId lastLogIndex lastLogTerm 
     \<and> req \<in> ms
     \<and> vg = (if election_term req < currentTerm (\<sigma> ! r) then False
-            else (votedFor (\<sigma> ! r) = None \<or> votedFor (\<sigma> ! r) = Some candidateId) \<and> log_up_to_date (log (\<sigma> ! r)) lastLogIndex lastLogTerm)) \<rbrakk>
+            else (votedFor (\<sigma> ! r) = None \<or> votedFor (\<sigma> ! r) = Some candidateId) \<and> log_up_to_date (log (\<sigma> ! r)) lastLogIndex lastLogTerm)
+    \<and> \<sigma>' ! r = (\<sigma> ! m) \<lparr> votedFor := Some s \<rparr>) \<rbrakk>
+  \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms \<union> {resp})"
+(* 
+   This algorithm for AppendEntry is different from the original paper;
+   leader is supposed to send all logs in the state for the simplicity (no need to calculate diffs for merging and leader retries)
+ *)
+| TR_append_entry_resp:
+  "\<lbrakk> resp = message s (node r) (append_entry_response success) t
+  ; ExReq resp (\<lambda>req. \<exists>leadersLog. payload req = append_entry _ _ leadersLog
+    \<and> req \<in> ms
+    \<and> success = (if election_term req < currentTerm (\<sigma> ! r) then False
+                 else if \<not> log_up_to_date (log (\<sigma> ! r)) prevLogIndex prevLogTerm then False
+                 else True)
+    \<and> \<sigma>' ! r = (\<sigma> ! m) \<lparr> log := leadersLog \<rparr>) \<rbrakk>
   \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms \<union> {resp})"
 
 end
