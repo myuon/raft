@@ -2,22 +2,22 @@ theory Raft
   imports Main
 begin
 
-datatype election_term = election_term nat
+datatype election_term = election_term (election_term_of: nat)
 
 instantiation election_term :: ord
 begin
 
 definition
-  "i < j \<longleftrightarrow> (case (i,j) of (election_term x, election_term y) \<Rightarrow> x < y)"
+  "i < j \<longleftrightarrow> election_term_of i < election_term_of j"
 
 instance ..
 
 end
 
 typedecl entry
-datatype log_index = log_index nat
+datatype log_index = log_index (log_index_of: nat)
 
-datatype node = node nat
+datatype node = node (node_of: nat)
 
 datatype message_payload
   = append_entry
@@ -57,13 +57,18 @@ definition respond_to where
 
 datatype node_state = follower | candidate | leader
 
+type_synonym log = "(entry \<times> election_term) list"
+
+definition log_up_to_date where
+  "log_up_to_date log index trm \<equiv> length log \<ge> (log_index_of index) \<and> snd (log ! (log_index_of index)) = trm"
+
 record server_state =
   state :: node_state
 
   (* Persistent state *)
   currentTerm :: election_term
   votedFor :: "node option"
-  log :: "entry list"
+  log :: log
   
   (* Volatile state *)
   commitIndex :: nat
@@ -77,7 +82,13 @@ definition ExReq where
   "ExReq resp P \<equiv> Ex (\<lambda>req. P req \<and> respond_to req resp)"
 
 inductive transition :: "server_state list \<times> message set \<Rightarrow> server_state list \<times> message set \<Rightarrow> bool" where
-TR_request_vote_resp: "\<lbrakk> resp = message s (node r) (request_vote_response vg) t; ExReq resp (\<lambda>req. req \<in> ms \<and> vg = (election_term req < currentTerm (\<sigma> ! r))) \<rbrakk> \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms \<union> {resp})"
+TR_request_vote_resp:
+  "\<lbrakk> resp = message s (node r) (request_vote_response vg) t
+  ; ExReq resp (\<lambda>req. \<exists>candidateId lastLogIndex lastLogTerm. payload req = request_vote candidateId lastLogIndex lastLogTerm 
+    \<and> req \<in> ms
+    \<and> vg = (if election_term req < currentTerm (\<sigma> ! r) then False
+            else (votedFor (\<sigma> ! r) = None \<or> votedFor (\<sigma> ! r) = Some candidateId) \<and> log_up_to_date (log (\<sigma> ! r)) lastLogIndex lastLogTerm)) \<rbrakk>
+  \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms \<union> {resp})"
 
 locale raft =
   (* The history of states and messages *)
