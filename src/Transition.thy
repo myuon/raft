@@ -76,7 +76,17 @@ definition ExReq where
   "ExReq resp P \<equiv> Ex (\<lambda>req. P req \<and> respond_to req resp)"
 
 inductive transition :: "server_state list \<times> message set \<Rightarrow> server_state list \<times> message set \<Rightarrow> bool" where
-TR_request_vote_resp:
+(* Assumption: all RequestVote messages to followers are sent at once. Is it appropriate to assume this? *)
+TR_start_election: 
+  "\<lbrakk> \<sigma>' = update target ((\<sigma> ! target) \<lparr>
+    currentTerm := increment_election_term (currentTerm (\<sigma> ! target)),
+    votedFor := Some (node target)
+   \<rparr>) \<sigma>
+   ; (index, term) = get_last_log_info (log (\<sigma>' ! target))
+   ; messages = {message (node target) (node i) (request_vote (node target) index term) (currentTerm (\<sigma>' ! target)) | i. i \<in> {0..length \<sigma> - 1}}
+   \<rbrakk>
+  \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms \<union> messages)"
+| TR_request_vote_resp:
   "\<lbrakk> resp = message s (node r) (request_vote_response vg) t
   ; ExReq resp (\<lambda>req. \<exists>candidateId lastLogIndex lastLogTerm. payload req = request_vote candidateId lastLogIndex lastLogTerm 
     \<and> req \<in> ms
@@ -99,9 +109,15 @@ TR_request_vote_resp:
   \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms \<union> {resp})"
 
 lemma transition_message_monotonicity: "transition (\<sigma>, m) (\<sigma>', m') \<Longrightarrow> m \<subseteq> m'"
-  apply (induct rule: transition.induct)
-  apply (simp add: ExReq_def respond_to_def)
-  apply (simp add: ExReq_def respond_to_def)
-  done
+proof-
+  assume hyp: "transition (\<sigma>,m) (\<sigma>',m')"
+
+  have "(\<lambda>(_, m). \<lambda>(_, m'). m \<subseteq> m') (\<sigma>,m) (\<sigma>', m')"
+    apply (induct rule: transition.induct [OF hyp])
+    apply auto
+    done
+  thus "m \<subseteq> m'"
+    by simp
+qed
 
 end

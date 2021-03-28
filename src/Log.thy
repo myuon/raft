@@ -10,4 +10,7 @@ type_synonym log = "(entry \<times> election_term) list"
 definition log_up_to_date where
   "log_up_to_date log index trm \<equiv> length log \<ge> (log_index_of index) \<and> snd (log ! (log_index_of index)) = trm"
 
+fun get_last_log_info :: "log \<Rightarrow> log_index \<times> election_term" where
+  "get_last_log_info log = (let (i,_,t) = last (enumerate 0 log) in (log_index i,t))"
+
 end
