@@ -9,7 +9,7 @@ locale raft =
     and number_of_nodes :: nat
 
   (* Transition for raft algorithm *)
-  assumes transition: "\<lbrakk> \<sigma> = all_states ! i; \<sigma>' = all_states ! (i + 1); m = all_messages ! i; m' = all_messages ! (i + 1) \<rbrakk> \<Longrightarrow> transition (\<sigma>,m) (\<sigma>',m')"
+  assumes transition: "\<lbrakk> \<sigma> = all_states ! i; \<sigma>' = all_states ! (i + 1); m = all_messages ! i; m' = all_messages ! (i + 1) \<rbrakk> \<Longrightarrow> transition number_of_nodes (\<sigma>,m) (\<sigma>',m')"
   and initial_state: "hd all_states = repeat (initial_server_state number_of_nodes) number_of_nodes"
   and initial_message: "hd all_messages = {}"
 
@@ -37,7 +37,7 @@ proof-
         ultimately have "all_messages ! i \<subseteq> all_messages ! (j - 1)"
           using \<open>\<And>y j i. \<lbrakk>y < x; y = j - i; i \<le> j\<rbrakk> \<Longrightarrow> all_messages ! i \<subseteq> all_messages ! j\<close> \<open>x = Suc x'\<close> by blast
 
-        have "transition (all_states ! (j - 1), all_messages ! (j - 1)) (all_states ! j, all_messages ! j)"
+        have "transition number_of_nodes (all_states ! (j - 1), all_messages ! (j - 1)) (all_states ! j, all_messages ! j)"
           by (metis One_nat_def \<open>i \<le> j - 1\<close> \<open>x = Suc x'\<close> \<open>x = j - i\<close> diff_Suc_1 diff_is_0_eq diff_zero le_add_diff_inverse2 le_cases raft.transition raft_axioms)
         hence "all_messages ! (j - 1) \<subseteq> all_messages ! j"
           by (simp add: transition_message_monotonicity)

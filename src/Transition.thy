@@ -75,7 +75,10 @@ definition initial_server_state where
 definition ExReq where
   "ExReq resp P \<equiv> Ex (\<lambda>req. P req \<and> respond_to req resp)"
 
-inductive transition :: "server_state list \<times> message set \<Rightarrow> server_state list \<times> message set \<Rightarrow> bool" where
+definition majority where
+  "majority n t \<equiv> 2 * t > n"
+
+inductive transition :: "nat \<Rightarrow> server_state list \<times> message set \<Rightarrow> server_state list \<times> message set \<Rightarrow> bool" where
 (* Assumption: all RequestVote messages to followers are sent at once. Is it appropriate to assume this? *)
 TR_start_election: 
   "\<lbrakk> \<sigma>' = update target ((\<sigma> ! target) \<lparr>
@@ -85,15 +88,26 @@ TR_start_election:
    ; (index, term) = get_last_log_info (log (\<sigma>' ! target))
    ; messages = {message (node target) (node i) (request_vote (node target) index term) (currentTerm (\<sigma>' ! target)) | i. i \<in> {0..length \<sigma> - 1}}
    \<rbrakk>
-  \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms \<union> messages)"
+  \<Longrightarrow> transition N (\<sigma>, ms) (\<sigma>', ms \<union> messages)"
 | TR_request_vote_resp:
   "\<lbrakk> resp = message s (node r) (request_vote_response vg) t
   ; ExReq resp (\<lambda>req. \<exists>candidateId lastLogIndex lastLogTerm. payload req = request_vote candidateId lastLogIndex lastLogTerm 
     \<and> req \<in> ms
     \<and> vg = (if sender_term req < currentTerm (\<sigma> ! r) then False
             else (votedFor (\<sigma> ! r) = None \<or> votedFor (\<sigma> ! r) = Some candidateId) \<and> log_up_to_date (log (\<sigma> ! r)) lastLogIndex lastLogTerm)
+    \<and> (votedFor (\<sigma> ! m) = Some s \<or> votedFor (\<sigma> ! m) = None) 
     \<and> \<sigma>' ! r = (\<sigma> ! m) \<lparr> votedFor := Some s \<rparr>) \<rbrakk>
-  \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms \<union> {resp})"
+  \<Longrightarrow> transition N (\<sigma>, ms) (\<sigma>', ms \<union> {resp})"
+(* The majority is checked by the number of messages so each follower cannot send the response messages multiple times. *)
+| TR_promote_to_leader:
+  "\<lbrakk> \<sigma>' = update target ((\<sigma> ! target) \<lparr> state := leader \<rparr>) \<sigma>
+  ; majority N (card {m \<in> ms | m = message s (node target) (request_vote_response vg) t \<and> t = currentTerm (\<sigma> ! target)})
+  \<rbrakk>
+  \<Longrightarrow> transition N (\<sigma>, ms) (\<sigma>', ms)"
+| TR_append_entry:
+  "\<lbrakk> m = message (node s) r (append_entry (node s) (log_index (length (log (\<sigma> ! s)) - 1)) (log (\<sigma> ! s))) (currentTerm (\<sigma> ! s))
+  ; state (\<sigma> ! s) = leader
+  \<rbrakk> \<Longrightarrow> transition N (\<sigma>, ms) (\<sigma>, ms \<union> {m})"
 (* 
    This algorithm for AppendEntry is different from the original paper;
    leader is supposed to send all logs in the state for the simplicity (no need to calculate diffs for merging and leader retries)
@@ -106,11 +120,11 @@ TR_start_election:
                  else if \<not> log_up_to_date (log (\<sigma> ! r)) prevLogIndex prevLogTerm then False
                  else True)
     \<and> \<sigma>' ! r = (\<sigma> ! m) \<lparr> log := leadersLog \<rparr>) \<rbrakk>
-  \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms \<union> {resp})"
+  \<Longrightarrow> transition N (\<sigma>, ms) (\<sigma>', ms \<union> {resp})"
 
-lemma transition_message_monotonicity: "transition (\<sigma>, m) (\<sigma>', m') \<Longrightarrow> m \<subseteq> m'"
+lemma transition_message_monotonicity: "transition N (\<sigma>, m) (\<sigma>', m') \<Longrightarrow> m \<subseteq> m'"
 proof-
-  assume hyp: "transition (\<sigma>,m) (\<sigma>',m')"
+  assume hyp: "transition N (\<sigma>,m) (\<sigma>',m')"
 
   have "(\<lambda>(_, m). \<lambda>(_, m'). m \<subseteq> m') (\<sigma>,m) (\<sigma>', m')"
     apply (induct rule: transition.induct [OF hyp])
