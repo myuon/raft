@@ -73,7 +73,7 @@ definition initial_server_state where
   \<rparr>"
 
 definition ExReq where
-  "ExReq resp P \<equiv> Ex (\<lambda>req. P req \<and> respond_to req resp)"
+  "ExReq resp P \<equiv> Ex (\<lambda>req. P req \<and> respond_to resp req)"
 
 definition majority where
   "majority n t \<equiv> 2 * t > n"
@@ -90,18 +90,17 @@ TR_start_election:
    \<rbrakk>
   \<Longrightarrow> transition N (\<sigma>, ms) (\<sigma>', ms \<union> messages)"
 | TR_request_vote_resp:
-  "\<lbrakk> resp = message s (node r) (request_vote_response vg) t
+  "\<lbrakk> resp = message (node m) (node r) (request_vote_response vg) t
   ; ExReq resp (\<lambda>req. \<exists>candidateId lastLogIndex lastLogTerm. payload req = request_vote candidateId lastLogIndex lastLogTerm 
     \<and> req \<in> ms
     \<and> vg = (if sender_term req < currentTerm (\<sigma> ! r) then False
             else (votedFor (\<sigma> ! r) = None \<or> votedFor (\<sigma> ! r) = Some candidateId) \<and> log_up_to_date (log (\<sigma> ! r)) lastLogIndex lastLogTerm)
-    \<and> (votedFor (\<sigma> ! m) = Some s \<or> votedFor (\<sigma> ! m) = None) 
-    \<and> \<sigma>' ! r = (\<sigma> ! m) \<lparr> votedFor := Some s \<rparr>) \<rbrakk>
+    \<and> (votedFor (\<sigma> ! m) = Some s \<or> votedFor (\<sigma> ! m) = None)) 
+  ; \<sigma>' = update m ((\<sigma> ! m) \<lparr> votedFor := Some s \<rparr>) \<sigma> \<rbrakk>
   \<Longrightarrow> transition N (\<sigma>, ms) (\<sigma>', ms \<union> {resp})"
-(* The majority is checked by the number of messages so each follower cannot send the response messages multiple times. *)
 | TR_promote_to_leader:
   "\<lbrakk> \<sigma>' = update target ((\<sigma> ! target) \<lparr> state := leader \<rparr>) \<sigma>
-  ; majority N (card {m \<in> ms | m = message s (node target) (request_vote_response vg) t \<and> t = currentTerm (\<sigma> ! target)})
+  ; majority N (card {s. \<exists>m \<in> ms. m = message s (node target) (request_vote_response True) (currentTerm (\<sigma> ! target))})
   \<rbrakk>
   \<Longrightarrow> transition N (\<sigma>, ms) (\<sigma>', ms)"
 | TR_append_entry:

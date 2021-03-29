@@ -19,6 +19,12 @@ abbreviation (in raft) transition_arrow (infix "\<rightarrow>" 50) where
 definition (in raft) transitions (infix "\<rightarrow>*" 50) where
   "transitions \<equiv> rtranclp (transition number_of_nodes)"
 
+lemma (in raft) transitions_one: "a \<rightarrow> b \<Longrightarrow> a \<rightarrow>* b"
+  by (simp add: transitions_def)
+
+lemma (in raft) transisions_trans [trans]: "a \<rightarrow>* b \<Longrightarrow> b \<rightarrow>* c \<Longrightarrow> a \<rightarrow>* c"
+  using transitions_def by auto
+
 inductive (in raft) transitions_trace where
 TRT_empty: "transitions_trace (\<sigma>,m) (\<sigma>,m) [(\<sigma>,m)]"
 | TRT_step: "\<lbrakk> transitions_trace (\<sigma>,m) (\<sigma>',m') ts; transition number_of_nodes (\<sigma>',m') (\<sigma>'',m'') \<rbrakk> \<Longrightarrow> transitions_trace (\<sigma>,m) (\<sigma>'',m'') ((\<sigma>'',m'')#ts)"
@@ -69,37 +75,47 @@ lemma (in raft)
   obtains \<sigma> ms where "(hd all_states, hd all_messages) \<rightarrow>* (\<sigma>, ms)" "state (\<sigma> ! 0) = leader"
 proof-
   have "([initial_server_state 3, initial_server_state 3, initial_server_state 3], hd all_messages)
-    \<rightarrow> ([initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>, initial_server_state 3, initial_server_state 3],
+    \<rightarrow>* ([initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>, initial_server_state 3, initial_server_state 3],
     {
       message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),
       message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1)
     })"
+    apply (rule transitions_one)
+    apply (cut_tac TR_start_election
+        [where N = number_of_nodes
+          , where ms = "hd all_messages"
+          , where \<sigma> = "[initial_server_state 3, initial_server_state 3, initial_server_state 3]"
+          , where target = "0"
+          , where index = "log_index 0"
+          , where ?term = "election_term 0"])
+    apply simp_all
+    defer
+    apply (simp add: initial_server_state_def)
   proof-
-    have "([initial_server_state 3, initial_server_state 3, initial_server_state 3], hd all_messages) = (hd all_states, hd all_messages)"
-      apply (simp add: initial_state assms)
-      by (simp add: numeral_3_eq_3)
-    also have "\<dots> \<rightarrow> (let \<sigma>' = update 0 ((hd all_states ! 0)\<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>) (hd all_states);
-      messages = {message (node 0) (node i) (request_vote (node 0) (log_index 0) (election_term 0)) (currentTerm (\<sigma>' ! 0)) |i. i \<in> {0..length (hd all_states) - 1} \<and> i \<noteq> 0} in
-    (\<sigma>', hd all_messages \<union> messages))"
-      using TR_start_election [of _ 0 "hd all_states" _ _ _ number_of_nodes "hd all_messages"]
-      by (simp add: initial_state initial_message assms repeat_nth update_nth_updated repeat_length initial_server_state_def)
-    also have "\<dots> = (let \<sigma>' = update 0 ((hd all_states ! 0)\<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>) (hd all_states) in
-    (\<sigma>', hd all_messages \<union> {
-      message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),
-      message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1)
-    }))"
-      apply (simp add: initial_state initial_message assms repeat_nth update_nth_updated repeat_length initial_server_state_def)
+    assume "([initial_server_state 3, initial_server_state 3, initial_server_state 3], hd all_messages) \<rightarrow>
+    ([initial_server_state 3\<lparr>currentTerm := election_term (Suc (election_term_of (currentTerm (initial_server_state 3)))), votedFor := Some (node 0)\<rparr>,
+      initial_server_state 3, initial_server_state 3],
+     hd all_messages \<union>
+     {message (node 0) (node i) (request_vote (node 0) (log_index 0) (election_term 0))
+       (election_term (Suc (election_term_of (currentTerm (initial_server_state 3))))) |
+      i. i \<le> Suc (Suc 0) \<and> 0 < i})"
+
+    have "[initial_server_state 3\<lparr>currentTerm := election_term (Suc (election_term_of (currentTerm (initial_server_state 3)))), votedFor := Some (node 0)\<rparr>, initial_server_state 3, initial_server_state 3]
+      = [initial_server_state 3\<lparr>currentTerm := election_term (Suc (election_term_of (currentTerm (hd all_states ! 0)))), votedFor := Some (node 0)\<rparr>, initial_server_state 3, initial_server_state 3]"
+      by (simp add: initial_state assms initial_server_state_def repeat_nth)
+    moreover have "hd all_messages \<union> {message (node 0) (node i) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc (election_term_of (currentTerm (initial_server_state 3))))) | i. i \<le> Suc (Suc 0) \<and> 0 < i}
+      = {message (node 0) (node (Suc 0)) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc 0)), message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc 0))}"
+      apply (simp add: initial_message initial_server_state_def)
       apply auto
       done
-    also have "\<dots> = ([initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>, initial_server_state 3, initial_server_state 3], {
-      message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),
-      message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1)
-    })"
-      by (simp add: initial_state initial_message assms repeat_nth numeral_3_eq_3)
-    finally show ?thesis
-      by simp
+    ultimately show "([initial_server_state 3, initial_server_state 3, initial_server_state 3], hd all_messages) \<rightarrow>
+    ([initial_server_state 3\<lparr>currentTerm := election_term (Suc (election_term_of (currentTerm (hd all_states ! 0)))), votedFor := Some (node 0)\<rparr>,
+      initial_server_state 3, initial_server_state 3],
+     {message (node 0) (node (Suc 0)) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc 0)),
+      message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc 0))})"
+      using \<open>([initial_server_state 3, initial_server_state 3, initial_server_state 3], hd all_messages) \<rightarrow> ([initial_server_state 3 \<lparr>currentTerm := election_term (Suc (election_term_of (currentTerm (initial_server_state 3)))), votedFor := Some (node 0)\<rparr>, initial_server_state 3, initial_server_state 3], hd all_messages \<union> {message (node 0) (node i) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc (election_term_of (currentTerm (initial_server_state 3))))) | i. i \<le> Suc (Suc 0) \<and> 0 < i})\<close> by force
   qed
-  moreover have "\<dots> \<rightarrow> (
+  also have "\<dots> \<rightarrow>* (
     [initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>,
      initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>, initial_server_state 3],
     {
@@ -107,10 +123,163 @@ proof-
       message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),
       message (node 1) (node 0) (request_vote_response True) (election_term 1)
     })"
-    sorry
+    apply (rule transitions_one)
+    apply (cut_tac TR_request_vote_resp
+        [where N = number_of_nodes 
+          , where \<sigma> = "[initial_server_state 3\<lparr>currentTerm := election_term (Suc (election_term_of (currentTerm (initial_server_state 3)))), votedFor := Some (node 0)\<rparr>, initial_server_state 3, initial_server_state 3]"
+          , where ms = "{ message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1), message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1) }"
+          , where \<sigma>' = "[initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>, initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>, initial_server_state 3]"
+          , where resp = "message (node 1) (node 0) (request_vote_response True) (election_term 1)"
+          , where s = "node 0"
+          ])
+    apply simp_all
+    apply (simp add: assms initial_state insert_commute numeral_3_eq_3)
+    defer
+    apply (simp add: initial_state assms initial_server_state_def repeat_nth)
+    apply (simp add: ExReq_def initial_state initial_server_state_def)
+  proof-
+    have "\<And>req. req = message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1)
+      \<Longrightarrow> \<not> sender_term req < election_term (Suc 0) \<and>
+          (\<not> sender_term req < election_term (Suc 0) \<longrightarrow>
+           (\<exists>lastLogIndex lastLogTerm.
+               payload req = request_vote (node 0) lastLogIndex lastLogTerm \<and>
+               (req = message (node 0) (node (Suc 0)) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc 0)) \<or>
+                req = message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc 0))) \<and>
+               log_up_to_date [] lastLogIndex lastLogTerm)) \<and>
+          respond_to (message (node (Suc 0)) (node 0) (request_vote_response True) (election_term (Suc 0))) req"
+      apply (auto simp add: respond_to_def)
+      using less_election_term_def apply force
+      apply (simp add: log_up_to_date_def)
+      done
+    show "\<exists>req. \<not> sender_term req < election_term (Suc 0) \<and>
+          (\<not> sender_term req < election_term (Suc 0) \<longrightarrow>
+           (\<exists>lastLogIndex lastLogTerm.
+               payload req = request_vote (node 0) lastLogIndex lastLogTerm \<and>
+               (req = message (node 0) (node (Suc 0)) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc 0)) \<or>
+                req = message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc 0))) \<and>
+               log_up_to_date [] lastLogIndex lastLogTerm)) \<and>
+          respond_to (message (node (Suc 0)) (node 0) (request_vote_response True) (election_term (Suc 0))) req"
+      by (meson \<open>\<And>req. req = message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1) \<Longrightarrow> \<not> sender_term req < election_term (Suc 0) \<and> (\<not> sender_term req < election_term (Suc 0) \<longrightarrow> (\<exists>lastLogIndex lastLogTerm. payload req = request_vote (node 0) lastLogIndex lastLogTerm \<and> (req = message (node 0) (node (Suc 0)) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc 0)) \<or> req = message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc 0))) \<and> log_up_to_date [] lastLogIndex lastLogTerm)) \<and> respond_to (message (node (Suc 0)) (node 0) (request_vote_response True) (election_term (Suc 0))) req\<close>)
+  qed
+  also have "\<dots> \<rightarrow>* (
+    [initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>,
+     initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>,
+     initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>],
+    {
+      message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),
+      message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),
+      message (node 1) (node 0) (request_vote_response True) (election_term 1),
+      message (node 2) (node 0) (request_vote_response True) (election_term 1)
+    })"
+    apply (rule transitions_one)
+    apply (cut_tac TR_request_vote_resp
+        [where N = number_of_nodes 
+          , where \<sigma> = "[initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>, initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>, initial_server_state 3]"
+          , where ms = "{message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),message (node 1) (node 0) (request_vote_response True) (election_term 1)}"
+          , where \<sigma>' = "[initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>,initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>,initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>]"
+          , where resp = "message (node 2) (node 0) (request_vote_response True) (election_term 1)"
+          , where s = "node 0"
+          ])
+    apply simp_all
+    apply (simp add: assms initial_state insert_commute numeral_3_eq_3)
+    defer
+    apply (simp add: initial_state assms initial_server_state_def repeat_nth numeral_2_eq_2)
+    apply (simp add: ExReq_def initial_state initial_server_state_def)
+  proof-
+    have "\<And>req. req = message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1)
+      \<Longrightarrow>\<not> sender_term req
+             < election_term
+                (Suc (election_term_of
+                       (currentTerm
+                         (repeat
+                           \<lparr>state = follower, currentTerm = election_term 0, votedFor = None, log = [], commitIndex = 0, lastApplied = 0,
+                              nextIndex = repeat (log_index 0) number_of_nodes, matchIndex = repeat (log_index 0) number_of_nodes\<rparr>
+                           number_of_nodes !
+                          0)))) \<and>
+          (\<not> sender_term req
+              < election_term
+                 (Suc (election_term_of
+                        (currentTerm
+                          (repeat
+                            \<lparr>state = follower, currentTerm = election_term 0, votedFor = None, log = [], commitIndex = 0, lastApplied = 0,
+                               nextIndex = repeat (log_index 0) number_of_nodes, matchIndex = repeat (log_index 0) number_of_nodes\<rparr>
+                            number_of_nodes !
+                           0)))) \<longrightarrow>
+           (\<exists>lastLogIndex lastLogTerm.
+               payload req = request_vote (node 0) lastLogIndex lastLogTerm \<and>
+               (req = message (node 0) (node (Suc 0)) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc 0)) \<or>
+                req = message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc 0)) \<or>
+                req = message (node (Suc 0)) (node 0) (request_vote_response True) (election_term (Suc 0))) \<and>
+               log_up_to_date [] lastLogIndex lastLogTerm)) \<and>
+          respond_to (message (node 2) (node 0) (request_vote_response True) (election_term (Suc 0))) req"
+      apply (auto simp add: respond_to_def assms repeat_nth)
+      using less_election_term_def apply force
+      apply (simp add: log_up_to_date_def)
+      done
+    show "\<exists>req. \<not> sender_term req
+             < election_term
+                (Suc (election_term_of
+                       (currentTerm
+                         (repeat
+                           \<lparr>state = follower, currentTerm = election_term 0, votedFor = None, log = [], commitIndex = 0, lastApplied = 0,
+                              nextIndex = repeat (log_index 0) number_of_nodes, matchIndex = repeat (log_index 0) number_of_nodes\<rparr>
+                           number_of_nodes !
+                          0)))) \<and>
+          (\<not> sender_term req
+              < election_term
+                 (Suc (election_term_of
+                        (currentTerm
+                          (repeat
+                            \<lparr>state = follower, currentTerm = election_term 0, votedFor = None, log = [], commitIndex = 0, lastApplied = 0,
+                               nextIndex = repeat (log_index 0) number_of_nodes, matchIndex = repeat (log_index 0) number_of_nodes\<rparr>
+                            number_of_nodes !
+                           0)))) \<longrightarrow>
+           (\<exists>lastLogIndex lastLogTerm.
+               payload req = request_vote (node 0) lastLogIndex lastLogTerm \<and>
+               (req = message (node 0) (node (Suc 0)) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc 0)) \<or>
+                req = message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc 0)) \<or>
+                req = message (node (Suc 0)) (node 0) (request_vote_response True) (election_term (Suc 0))) \<and>
+               log_up_to_date [] lastLogIndex lastLogTerm)) \<and>
+          respond_to (message (node 2) (node 0) (request_vote_response True) (election_term (Suc 0))) req"
+      by (meson \<open>\<And>req. req = message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1) \<Longrightarrow> \<not> sender_term req < election_term (Suc (election_term_of (currentTerm (repeat \<lparr>state = follower, currentTerm = election_term 0, votedFor = None, log = [], commitIndex = 0, lastApplied = 0, nextIndex = repeat (log_index 0) number_of_nodes, matchIndex = repeat (log_index 0) number_of_nodes\<rparr> number_of_nodes ! 0)))) \<and> (\<not> sender_term req < election_term (Suc (election_term_of (currentTerm (repeat \<lparr>state = follower, currentTerm = election_term 0, votedFor = None, log = [], commitIndex = 0, lastApplied = 0, nextIndex = repeat (log_index 0) number_of_nodes, matchIndex = repeat (log_index 0) number_of_nodes\<rparr> number_of_nodes ! 0)))) \<longrightarrow> (\<exists>lastLogIndex lastLogTerm. payload req = request_vote (node 0) lastLogIndex lastLogTerm \<and> (req = message (node 0) (node (Suc 0)) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc 0)) \<or> req = message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term (Suc 0)) \<or> req = message (node (Suc 0)) (node 0) (request_vote_response True) (election_term (Suc 0))) \<and> log_up_to_date [] lastLogIndex lastLogTerm)) \<and> respond_to (message (node 2) (node 0) (request_vote_response True) (election_term (Suc 0))) req\<close>)
+  qed
+  also have "\<dots> \<rightarrow>* (
+    [initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0), state := leader\<rparr>,
+     initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>,
+     initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>],
+    {
+      message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),
+      message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),
+      message (node 1) (node 0) (request_vote_response True) (election_term 1),
+      message (node 2) (node 0) (request_vote_response True) (election_term 1)
+    })" (is "\<dots> \<rightarrow>* (?state, ?messages)")
+    apply (rule transitions_one)
+    apply (cut_tac TR_promote_to_leader
+        [where N = number_of_nodes
+          , where \<sigma> = "[initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>,initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>,initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>]"
+          , where ms = "{message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),message (node 1) (node 0) (request_vote_response True) (election_term 1),message (node 2) (node 0) (request_vote_response True) (election_term 1)}"
+          , where target = "0"
+          , where \<sigma>' = "[initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0), state := leader\<rparr>,initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>,initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>]"
+          ])
+    apply simp_all
+    apply (simp add: assms majority_def initial_state initial_server_state_def repeat_nth)
+  proof-
+    have "{s. s = node 1 \<or> s = node 2} = {node 1, node 2}"
+      by auto
+    moreover have "node 1 \<noteq> node 2"
+      by simp
+    ultimately have "card {s. s = node 1 \<or> s = node 2} = 2"
+      by simp
+    thus "3 < 2 * card {s. s = node (Suc 0) \<or> s = node 2}"
+      by simp
+  qed
+  finally have "(hd all_states, hd all_messages) \<rightarrow>* (?state, ?messages)" "state (?state ! 0) = leader"
+    apply (simp add: initial_state assms numeral_3_eq_3)
+    apply simp
+    done
 
-  show ?thesis
-    sorry
+  thus ?thesis
+    using that by blast
 qed
 
 end
