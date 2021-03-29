@@ -86,7 +86,7 @@ TR_start_election:
     votedFor := Some (node target)
    \<rparr>) \<sigma>
    ; (index, term) = get_last_log_info (log (\<sigma>' ! target))
-   ; messages = {message (node target) (node i) (request_vote (node target) index term) (currentTerm (\<sigma>' ! target)) | i. i \<in> {0..length \<sigma> - 1}}
+   ; messages = {message (node target) (node i) (request_vote (node target) index term) (currentTerm (\<sigma>' ! target)) | i. i \<in> {0..length \<sigma> - 1} \<and> i \<noteq> target}
    \<rbrakk>
   \<Longrightarrow> transition N (\<sigma>, ms) (\<sigma>', ms \<union> messages)"
 | TR_request_vote_resp:

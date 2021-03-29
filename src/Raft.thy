@@ -13,6 +13,16 @@ locale raft =
   and initial_state: "hd all_states = repeat (initial_server_state number_of_nodes) number_of_nodes"
   and initial_message: "hd all_messages = {}"
 
+abbreviation (in raft) transition_arrow (infix "\<rightarrow>" 50) where
+  "transition_arrow \<equiv> transition number_of_nodes"
+
+definition (in raft) transitions (infix "\<rightarrow>*" 50) where
+  "transitions \<equiv> rtranclp (transition number_of_nodes)"
+
+inductive (in raft) transitions_trace where
+TRT_empty: "transitions_trace (\<sigma>,m) (\<sigma>,m) [(\<sigma>,m)]"
+| TRT_step: "\<lbrakk> transitions_trace (\<sigma>,m) (\<sigma>',m') ts; transition number_of_nodes (\<sigma>',m') (\<sigma>'',m'') \<rbrakk> \<Longrightarrow> transitions_trace (\<sigma>,m) (\<sigma>'',m'') ((\<sigma>'',m'')#ts)"
+
 lemma (in raft) message_monotonicity: "i \<le> j \<Longrightarrow> all_messages ! i \<subseteq> all_messages ! j"
 proof-
   assume "i \<le> j"
@@ -52,6 +62,55 @@ proof-
 
   thus ?thesis
     by (simp add: \<open>\<And>n. \<lbrakk>n = j - i; i \<le> j\<rbrakk> \<Longrightarrow> all_messages ! i \<subseteq> all_messages ! j\<close> \<open>i \<le> j\<close>)
+qed
+
+lemma (in raft)
+  assumes "number_of_nodes = 3"
+  obtains \<sigma> ms where "(hd all_states, hd all_messages) \<rightarrow>* (\<sigma>, ms)" "state (\<sigma> ! 0) = leader"
+proof-
+  have "([initial_server_state 3, initial_server_state 3, initial_server_state 3], hd all_messages)
+    \<rightarrow> ([initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>, initial_server_state 3, initial_server_state 3],
+    {
+      message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),
+      message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1)
+    })"
+  proof-
+    have "([initial_server_state 3, initial_server_state 3, initial_server_state 3], hd all_messages) = (hd all_states, hd all_messages)"
+      apply (simp add: initial_state assms)
+      by (simp add: numeral_3_eq_3)
+    also have "\<dots> \<rightarrow> (let \<sigma>' = update 0 ((hd all_states ! 0)\<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>) (hd all_states);
+      messages = {message (node 0) (node i) (request_vote (node 0) (log_index 0) (election_term 0)) (currentTerm (\<sigma>' ! 0)) |i. i \<in> {0..length (hd all_states) - 1} \<and> i \<noteq> 0} in
+    (\<sigma>', hd all_messages \<union> messages))"
+      using TR_start_election [of _ 0 "hd all_states" _ _ _ number_of_nodes "hd all_messages"]
+      by (simp add: initial_state initial_message assms repeat_nth update_nth_updated repeat_length initial_server_state_def)
+    also have "\<dots> = (let \<sigma>' = update 0 ((hd all_states ! 0)\<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>) (hd all_states) in
+    (\<sigma>', hd all_messages \<union> {
+      message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),
+      message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1)
+    }))"
+      apply (simp add: initial_state initial_message assms repeat_nth update_nth_updated repeat_length initial_server_state_def)
+      apply auto
+      done
+    also have "\<dots> = ([initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>, initial_server_state 3, initial_server_state 3], {
+      message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),
+      message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1)
+    })"
+      by (simp add: initial_state initial_message assms repeat_nth numeral_3_eq_3)
+    finally show ?thesis
+      by simp
+  qed
+  moreover have "\<dots> \<rightarrow> (
+    [initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>,
+     initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>, initial_server_state 3],
+    {
+      message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),
+      message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),
+      message (node 1) (node 0) (request_vote_response True) (election_term 1)
+    })"
+    sorry
+
+  show ?thesis
+    sorry
 qed
 
 end
