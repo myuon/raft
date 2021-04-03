@@ -142,6 +142,90 @@ TR_start_election: "TR_condition_start_election \<sigma> \<sigma>' ms ms' target
 | TR_append_entry: "TR_condition_append_entry \<sigma> \<sigma>' ms ms' s r \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms')"
 | TR_append_entry_resp: "TR_condition_append_entry_resp \<sigma> \<sigma>' ms ms' leadersLog prevLogTerm prevLogIndex t success r s \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms')"
 
+lemma leader_promote_inversion_for_transition:
+  "\<lbrakk> i < length \<sigma>; transition (\<sigma>, ms) (\<sigma>', ms'); state (\<sigma> ! i) \<noteq> leader; state (\<sigma>' ! i) = leader \<rbrakk> \<Longrightarrow> majority (length \<sigma>) (card {s. \<exists>m \<in> ms. m = message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i))})"
+  apply (cases rule: transition.cases)
+  apply simp_all
+proof-
+  fix \<sigma>'' \<sigma>''' msa ms'a target
+  show "i < length \<sigma> \<Longrightarrow>
+       (\<sigma>, ms) \<rightarrow> (\<sigma>', ms') \<Longrightarrow>
+       state (\<sigma> ! i) \<noteq> leader \<Longrightarrow>
+       state (\<sigma>' ! i) = leader \<Longrightarrow>
+       (\<sigma>, ms) = (\<sigma>'', msa) \<Longrightarrow>
+       (\<sigma>', ms') = (\<sigma>''', ms'a) \<Longrightarrow>
+       TR_condition_start_election \<sigma>'' \<sigma>''' msa ms'a target \<Longrightarrow>
+       majority (length \<sigma>) (card {s. message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i)) \<in> ms})"
+    apply (simp add: TR_condition_start_election_def)
+    apply (cases "\<sigma>'' ! target")
+    apply simp
+    by (metis select_convs(1) update_nth_nonupdated update_nth_updated)
+next
+  fix \<sigma>'' \<sigma>''' msa ms'a m r s t vg
+  show "i < length \<sigma> \<Longrightarrow>
+       (\<sigma>, ms) \<rightarrow> (\<sigma>', ms') \<Longrightarrow>
+       state (\<sigma> ! i) \<noteq> leader \<Longrightarrow>
+       state (\<sigma>' ! i) = leader \<Longrightarrow>
+       (\<sigma>, ms) = (\<sigma>'', msa) \<Longrightarrow>
+       (\<sigma>', ms') = (\<sigma>''', ms'a) \<Longrightarrow>
+       TR_condition_request_vote_resp \<sigma>'' \<sigma>''' msa ms'a m r s t vg \<Longrightarrow>
+       majority (length \<sigma>) (card {s. message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i)) \<in> ms})"
+    apply (simp add: TR_condition_request_vote_resp_def)
+    apply (cases "\<sigma>'' ! m")
+    apply simp
+    by (metis select_convs(1) update_nth_nonupdated update_nth_updated)
+next
+  fix \<sigma>'' \<sigma>''' msa ms'a target
+  show "i < length \<sigma> \<Longrightarrow>
+       (\<sigma>, ms) \<rightarrow> (\<sigma>', ms') \<Longrightarrow>
+       state (\<sigma> ! i) \<noteq> leader \<Longrightarrow>
+       state (\<sigma>' ! i) = leader \<Longrightarrow>
+       (\<sigma>, ms) = (\<sigma>'', msa) \<Longrightarrow>
+       (\<sigma>', ms') = (\<sigma>''', ms'a) \<Longrightarrow>
+       TR_condition_promote_to_leader \<sigma>'' \<sigma>''' msa ms'a target \<Longrightarrow>
+       majority (length \<sigma>) (card {s. message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i)) \<in> ms})"
+    apply (simp add: TR_condition_promote_to_leader_def)
+    apply (cases "\<sigma>'' ! target")
+    apply simp
+    by (metis select_convs(2) update_nth_nonupdated)
+next
+  fix \<sigma>'' \<sigma>''' msa ms'a s r
+  show "i < length \<sigma> \<Longrightarrow>
+       (\<sigma>, ms) \<rightarrow> (\<sigma>', ms') \<Longrightarrow>
+       state (\<sigma> ! i) \<noteq> leader \<Longrightarrow>
+       state (\<sigma>' ! i) = leader \<Longrightarrow>
+       (\<sigma>, ms) = (\<sigma>'', msa) \<Longrightarrow>
+       (\<sigma>', ms') = (\<sigma>''', ms'a) \<Longrightarrow>
+       TR_condition_append_entry \<sigma>'' \<sigma>''' msa ms'a s r \<Longrightarrow>
+       majority (length \<sigma>) (card {s. message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i)) \<in> ms})"
+    apply (simp add: TR_condition_append_entry_def)
+    done
+next
+  fix \<sigma>'' \<sigma>''' msa ms'a leadersLog prevLogTerm prevLogIndex t success r s
+  show "i < length \<sigma> \<Longrightarrow>
+       (\<sigma>, ms) \<rightarrow> (\<sigma>', ms') \<Longrightarrow>
+       state (\<sigma> ! i) \<noteq> leader \<Longrightarrow>
+       state (\<sigma>' ! i) = leader \<Longrightarrow>
+       (\<sigma>, ms) = (\<sigma>'', msa) \<Longrightarrow>
+       (\<sigma>', ms') = (\<sigma>''', ms'a) \<Longrightarrow>
+       TR_condition_append_entry_resp \<sigma>'' \<sigma>''' msa ms'a leadersLog prevLogTerm prevLogIndex t success r s \<Longrightarrow>
+       majority (length \<sigma>) (card {s. message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i)) \<in> ms})"
+    apply (simp add: TR_condition_append_entry_resp_def)
+    apply (cases "\<sigma>''' ! s")
+    by (metis (no_types, lifting) select_convs(1) surjective update_convs(4) update_nth_nonupdated update_nth_updated)
+qed
+
+lemma state_length_invariant_for_transition: "transition (\<sigma>, m) (\<sigma>', m') \<Longrightarrow> length \<sigma> = length \<sigma>'"
+  apply (cases rule: transition.cases)
+  apply simp_all
+  apply (simp add: TR_condition_start_election_def)
+  apply (simp add: TR_condition_request_vote_resp_def)
+     apply (metis update_length)
+  apply (simp add: TR_condition_promote_to_leader_def)
+  apply (simp add: TR_condition_append_entry_def)
+  apply (simp add: TR_condition_append_entry_resp_def)
+  by (metis update_length)
+
 lemma transition_message_monotonicity: "(\<sigma>, m) \<rightarrow> (\<sigma>', m') \<Longrightarrow> m \<subseteq> m'"
 proof-
   assume hyp: "transition (\<sigma>,m) (\<sigma>',m')"

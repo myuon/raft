@@ -14,6 +14,9 @@ locale raft =
   and initial_message: "hd all_messages = {}"
   and state_message_sync: "length all_states = length all_messages"
 
+lemma (in raft) transition_previous: "n > 0 \<Longrightarrow> (all_states ! (n - 1), all_messages ! (n - 1)) \<rightarrow> (all_states ! n, all_messages ! n)"
+  by (simp add: transition)
+
 lemma (in raft) message_monotonicity: "i \<le> j \<Longrightarrow> all_messages ! i \<subseteq> all_messages ! j"
 proof-
   assume "i \<le> j"
@@ -54,6 +57,18 @@ proof-
   thus ?thesis
     by (simp add: \<open>\<And>n. \<lbrakk>n = j - i; i \<le> j\<rbrakk> \<Longrightarrow> all_messages ! i \<subseteq> all_messages ! j\<close> \<open>i \<le> j\<close>)
 qed
+
+definition (in raft) valid_params where
+  "valid_params n i \<equiv> (n < length all_states \<and> i < number_of_nodes)"
+
+lemma (in raft) valid_params_length_previous: "valid_params (n + 1) i \<Longrightarrow> valid_params n i"
+  by (meson add_lessD1 valid_params_def)
+
+lemma (in raft) state_length_invariant: "valid_params n 0 \<Longrightarrow> length (all_states ! n) = number_of_nodes"
+  apply (induct n)
+  apply (metis hd_0th initial_state raft.valid_params_def raft_axioms repeat_length)
+  apply (metis Suc_eq_plus1 state_length_invariant_for_transition transition valid_params_length_previous)
+  done
 
 lemma (in raft)
   assumes "number_of_nodes = 3"

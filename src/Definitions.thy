@@ -76,4 +76,7 @@ fun increment_election_term where
 
 datatype node = node (node_of: nat)
 
+lemma hd_0th: "length xs > 0 \<Longrightarrow> hd xs = xs ! 0"
+  by (simp add: hd_conv_nth)
+
 end
