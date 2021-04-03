@@ -69,9 +69,7 @@ proof-
     apply (cut_tac TR_start_election
         [where ms = "hd all_messages"
           , where \<sigma> = "[initial_server_state 3, initial_server_state 3, initial_server_state 3]"
-          , where target = "0"
-          , where index = "log_index 0"
-          , where ?term = "election_term 0"])
+          ])
     apply simp_all
     defer
     apply (simp add: initial_server_state_def)

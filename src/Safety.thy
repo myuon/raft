@@ -17,14 +17,17 @@ lemma (in raft) transition_previous: "n > 0 \<Longrightarrow> (all_states ! (n -
 lemma state_length_invariant_for_transition: "transition (\<sigma>, m) (\<sigma>', m') \<Longrightarrow> length \<sigma> = length \<sigma>'"
   apply (cases rule: transition.cases)
   apply simp+
-  sorry
+  done
+
+lemma (in raft) state_length_invariant: "valid_params n 0 \<Longrightarrow> length (all_states ! n) = number_of_nodes"
+  apply (induct n)
+  apply (metis hd_0th initial_state raft.valid_params_def raft_axioms repeat_length)
+  apply (metis Suc_eq_plus1 state_length_invariant_for_transition transition valid_params_length_previous)
+  done
 
 lemma leader_promote_inversion_for_transition:
-  "\<lbrakk> i < length \<sigma>; transition (\<sigma>, ms) (\<sigma>', ms'); state (\<sigma> ! i) \<noteq> leader; state (\<sigma>' ! i) = leader \<rbrakk> \<Longrightarrow> majority N (card {s. \<exists>m \<in> ms. m = message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i))})"
+  "\<lbrakk> i < length \<sigma>; transition (\<sigma>, ms) (\<sigma>', ms'); state (\<sigma> ! i) \<noteq> leader; state (\<sigma>' ! i) = leader \<rbrakk> \<Longrightarrow> majority (length \<sigma>) (card {s. \<exists>m \<in> ms. m = message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i))})"
   apply (cases rule: transition.cases)
-  apply simp_all
-  apply (simp add: update_nth_nonupdated)
-  sorry
 
 lemma (in raft) majority_vote_for_leader:
   "\<lbrakk> valid_params n i; state (all_states ! n ! i) = leader \<rbrakk>
