@@ -79,7 +79,36 @@ definition ExReq where
   "ExReq resp P \<equiv> Ex (ExReqProps resp P)"
 
 definition majority where
-  "majority n t \<equiv> 2 * t > n"
+  "majority n t \<equiv> 2 * card t > n"
+
+lemma majority_pigeonhole: "\<lbrakk> finite u; card u = n; x \<subseteq> u; y \<subseteq> u; majority n x; majority n y \<rbrakk> \<Longrightarrow> x \<inter> y \<noteq> {}"
+proof-
+  assume "finite u" "card u = n" "x \<subseteq> u" "y \<subseteq> u" "majority n x" "majority n y"
+
+  have "2 * card x > n"
+    using \<open>majority n x\<close> majority_def by blast
+  moreover have "2 * card y > n"
+    using \<open>majority n y\<close> majority_def by auto
+  ultimately have "card x + card y > n"
+    by simp
+
+  { assume "x \<inter> y = {}"
+    have "card (x \<union> y) = card x + card y"
+      by (meson \<open>finite u\<close> \<open>x \<inter> y = {}\<close> \<open>x \<subseteq> u\<close> \<open>y \<subseteq> u\<close> card_Un_disjoint finite_subset)
+    also have "\<dots> > n"
+      by (simp add: \<open>n < card x + card y\<close>)
+    finally have "card (x \<union> y) > n"
+      by simp
+
+    have "x \<union> y \<subseteq> u"
+      by (simp add: \<open>x \<subseteq> u\<close> \<open>y \<subseteq> u\<close>)
+
+    have False
+      by (metis \<open>card u = n\<close> \<open>finite u\<close> \<open>n < card (x \<union> y)\<close> \<open>x \<union> y \<subseteq> u\<close> card_mono not_le)
+  }
+  thus "x \<inter> y \<noteq> {}"
+    by auto
+qed
 
 (* Assumption: all RequestVote messages to followers are sent at once. Is it appropriate to assume this? *)
 definition TR_condition_start_election where
@@ -101,21 +130,23 @@ definition TR_condition_request_vote_resp where
                else (votedFor (\<sigma> ! r) = None \<or> votedFor (\<sigma> ! r) = Some candidateId) \<and> log_up_to_date (log (\<sigma> ! r)) lastLogIndex lastLogTerm)
        \<and> (votedFor (\<sigma> ! m) = Some s \<or> votedFor (\<sigma> ! m) = None)))
      \<and> m < length \<sigma>
+     \<and> r < length \<sigma>
      \<and> \<sigma>' = update m ((\<sigma> ! m) \<lparr> votedFor := Some s \<rparr>) \<sigma>
      \<and> ms' = ms \<union> {resp}"
 
 definition TR_condition_promote_to_leader where
   "TR_condition_promote_to_leader \<sigma> \<sigma>' ms ms' target \<equiv>
-    majority (length \<sigma>) (card {s. \<exists>m \<in> ms. m = message s (node target) (request_vote_response True) (currentTerm (\<sigma> ! target))})
+    majority (length \<sigma>) {s. \<exists>m \<in> ms. m = message s (node target) (request_vote_response True) (currentTerm (\<sigma> ! target))}
     \<and> target < length \<sigma>
     \<and> \<sigma>' = update target ((\<sigma> ! target) \<lparr> state := leader \<rparr>) \<sigma>
     \<and> ms' = ms"
 
 definition TR_condition_append_entry where
   "TR_condition_append_entry \<sigma> \<sigma>' ms ms' s r \<equiv>
-    let m = message (node s) r (append_entry (node s) (log_index (length (log (\<sigma> ! s)) - 1)) (log (\<sigma> ! s))) (currentTerm (\<sigma> ! s)) in
+    let m = message (node s) (node r) (append_entry (node s) (log_index (length (log (\<sigma> ! s)) - 1)) (log (\<sigma> ! s))) (currentTerm (\<sigma> ! s)) in
     state (\<sigma> ! s) = leader
     \<and> s < length \<sigma>
+    \<and> r < length \<sigma>
     \<and> \<sigma>' = \<sigma>
     \<and> ms' = ms \<union> {m}"
 
@@ -132,6 +163,7 @@ definition TR_condition_append_entry_resp where
                  else if \<not> log_up_to_date (log (\<sigma> ! r)) prevLogIndex prevLogTerm then False
                  else True))
     \<and> s < length \<sigma>
+    \<and> r < length \<sigma>
     \<and> \<sigma>' = update s ((\<sigma> ! s) \<lparr> log := leadersLog \<rparr>) \<sigma>
     \<and> ms' = ms \<union> {resp}"
 
@@ -143,7 +175,7 @@ TR_start_election: "TR_condition_start_election \<sigma> \<sigma>' ms ms' target
 | TR_append_entry_resp: "TR_condition_append_entry_resp \<sigma> \<sigma>' ms ms' leadersLog prevLogTerm prevLogIndex t success r s \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms')"
 
 lemma leader_promote_inversion_for_transition:
-  "\<lbrakk> i < length \<sigma>; transition (\<sigma>, ms) (\<sigma>', ms'); state (\<sigma> ! i) \<noteq> leader; state (\<sigma>' ! i) = leader \<rbrakk> \<Longrightarrow> majority (length \<sigma>) (card {s. \<exists>m \<in> ms. m = message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i))})"
+  "\<lbrakk> i < length \<sigma>; transition (\<sigma>, ms) (\<sigma>', ms'); state (\<sigma> ! i) \<noteq> leader; state (\<sigma>' ! i) = leader \<rbrakk> \<Longrightarrow> majority (length \<sigma>) {s. \<exists>m \<in> ms. m = message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i))}"
   apply (cases rule: transition.cases)
   apply simp_all
 proof-
@@ -155,7 +187,7 @@ proof-
        (\<sigma>, ms) = (\<sigma>'', msa) \<Longrightarrow>
        (\<sigma>', ms') = (\<sigma>''', ms'a) \<Longrightarrow>
        TR_condition_start_election \<sigma>'' \<sigma>''' msa ms'a target \<Longrightarrow>
-       majority (length \<sigma>) (card {s. message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i)) \<in> ms})"
+       majority (length \<sigma>) {s. message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i)) \<in> ms}"
     apply (simp add: TR_condition_start_election_def)
     apply (cases "\<sigma>'' ! target")
     apply simp
@@ -169,7 +201,7 @@ next
        (\<sigma>, ms) = (\<sigma>'', msa) \<Longrightarrow>
        (\<sigma>', ms') = (\<sigma>''', ms'a) \<Longrightarrow>
        TR_condition_request_vote_resp \<sigma>'' \<sigma>''' msa ms'a m r s t vg \<Longrightarrow>
-       majority (length \<sigma>) (card {s. message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i)) \<in> ms})"
+       majority (length \<sigma>) {s. message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i)) \<in> ms}"
     apply (simp add: TR_condition_request_vote_resp_def)
     apply (cases "\<sigma>'' ! m")
     apply simp
@@ -183,7 +215,7 @@ next
        (\<sigma>, ms) = (\<sigma>'', msa) \<Longrightarrow>
        (\<sigma>', ms') = (\<sigma>''', ms'a) \<Longrightarrow>
        TR_condition_promote_to_leader \<sigma>'' \<sigma>''' msa ms'a target \<Longrightarrow>
-       majority (length \<sigma>) (card {s. message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i)) \<in> ms})"
+       majority (length \<sigma>) {s. message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i)) \<in> ms}"
     apply (simp add: TR_condition_promote_to_leader_def)
     apply (cases "\<sigma>'' ! target")
     apply simp
@@ -197,7 +229,7 @@ next
        (\<sigma>, ms) = (\<sigma>'', msa) \<Longrightarrow>
        (\<sigma>', ms') = (\<sigma>''', ms'a) \<Longrightarrow>
        TR_condition_append_entry \<sigma>'' \<sigma>''' msa ms'a s r \<Longrightarrow>
-       majority (length \<sigma>) (card {s. message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i)) \<in> ms})"
+       majority (length \<sigma>) {s. message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i)) \<in> ms}"
     apply (simp add: TR_condition_append_entry_def)
     done
 next
@@ -209,7 +241,7 @@ next
        (\<sigma>, ms) = (\<sigma>'', msa) \<Longrightarrow>
        (\<sigma>', ms') = (\<sigma>''', ms'a) \<Longrightarrow>
        TR_condition_append_entry_resp \<sigma>'' \<sigma>''' msa ms'a leadersLog prevLogTerm prevLogIndex t success r s \<Longrightarrow>
-       majority (length \<sigma>) (card {s. message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i)) \<in> ms})"
+       majority (length \<sigma>) {s. message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i)) \<in> ms}"
     apply (simp add: TR_condition_append_entry_resp_def)
     apply (cases "\<sigma>''' ! s")
     by (metis (no_types, lifting) select_convs(1) surjective update_convs(4) update_nth_nonupdated update_nth_updated)
@@ -239,6 +271,18 @@ proof-
   thus "m \<subseteq> m'"
     by simp
 qed
+
+lemma transition_message_preserves_finite: "\<lbrakk> (\<sigma>,m) \<rightarrow> (\<sigma>',m'); finite m \<rbrakk> \<Longrightarrow> finite m'"
+  apply (cases rule: transition.cases)
+  apply simp_all
+  apply (simp add: TR_condition_start_election_def)
+  apply auto[1]
+  apply (simp add: TR_condition_request_vote_resp_def)
+  apply (metis finite_insert)
+  apply (simp add: TR_condition_promote_to_leader_def)
+  apply (simp add: TR_condition_append_entry_def)
+  apply (simp add: TR_condition_append_entry_resp_def)
+  by (metis finite_insert)
 
 definition transitions (infix "\<rightarrow>*" 50) where
   "transitions \<equiv> rtranclp transition"
