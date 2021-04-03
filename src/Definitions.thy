@@ -46,6 +46,19 @@ proof-
     using \<open>\<And>j i. \<lbrakk>i < length xs; j < length xs; i \<noteq> j\<rbrakk> \<Longrightarrow> update i a xs ! j = xs ! j\<close> \<open>i < length (aa # xs)\<close> \<open>i \<noteq> j\<close> \<open>j < length (aa # xs)\<close> by auto
 qed
 
+lemma update_length [simp]: "i < length xs \<Longrightarrow> length (update i a xs) = length xs"
+  apply (induct xs arbitrary: i)
+  apply simp_all
+proof-
+  fix aa xs i
+  assume "(\<And>i. i < length xs \<Longrightarrow> length (update i a xs) = length xs)" "i < Suc (length xs)"
+
+  show "length (update i a (aa # xs)) = Suc (length xs)"
+    apply (cases i)
+    apply simp_all
+    using \<open>\<And>i. i < length xs \<Longrightarrow> length (update i a xs) = length xs\<close> \<open>i < Suc (length xs)\<close> by auto
+qed
+
 datatype election_term = election_term (election_term_of: nat)
 
 instantiation election_term :: ord

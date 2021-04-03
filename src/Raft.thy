@@ -12,6 +12,7 @@ locale raft =
   assumes transition: "\<lbrakk> \<sigma> = all_states ! i; \<sigma>' = all_states ! (i + 1); m = all_messages ! i; m' = all_messages ! (i + 1) \<rbrakk> \<Longrightarrow> transition number_of_nodes (\<sigma>,m) (\<sigma>',m')"
   and initial_state: "hd all_states = repeat (initial_server_state number_of_nodes) number_of_nodes"
   and initial_message: "hd all_messages = {}"
+  and state_message_sync: "length all_states = length all_messages"
 
 abbreviation (in raft) transition_arrow (infix "\<rightarrow>" 50) where
   "transition_arrow \<equiv> transition number_of_nodes"
