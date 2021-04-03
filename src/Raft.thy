@@ -176,6 +176,14 @@ proof-
     by (metis \<open>length (all_states ! n) = number_of_nodes\<close> \<open>m \<in> all_messages ! n \<Longrightarrow> valid_params n (node_of (sender m)) \<and> valid_params n (node_of (receiver m))\<close> \<open>m \<in> all_messages ! n \<or> node_of (sender m) < length (all_states ! n) \<and> node_of (receiver m) < length (all_states ! n)\<close> \<open>node_of (sender m) \<le> length (all_states ! n) \<and> node_of (receiver m) \<le> length (all_states ! n) \<Longrightarrow> valid_params (Suc n) (node_of (sender m)) \<and> valid_params (Suc n) (node_of (receiver m))\<close> nat_less_le valid_params_def)
 qed
 
+lemma (in raft) all_messages_contains_valid_sender: "\<lbrakk> valid_params n i; m \<in> all_messages ! n \<rbrakk> \<Longrightarrow> valid_params n (node_of (sender m))"
+  using all_messages_contains_valid_messages
+  by auto
+
+lemma (in raft) all_messages_contains_valid_receiver: "\<lbrakk> valid_params n i; m \<in> all_messages ! n \<rbrakk> \<Longrightarrow> valid_params n (node_of (receiver m))"
+  using all_messages_contains_valid_messages
+  by auto
+
 lemma (in raft)
   assumes "number_of_nodes = 3"
   obtains \<sigma> ms where "(hd all_states, hd all_messages) \<rightarrow>* (\<sigma>, ms)" "state (\<sigma> ! 0) = leader"
