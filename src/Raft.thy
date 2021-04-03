@@ -9,26 +9,10 @@ locale raft =
     and number_of_nodes :: nat
 
   (* Transition for raft algorithm *)
-  assumes transition: "\<lbrakk> \<sigma> = all_states ! i; \<sigma>' = all_states ! (i + 1); m = all_messages ! i; m' = all_messages ! (i + 1) \<rbrakk> \<Longrightarrow> transition number_of_nodes (\<sigma>,m) (\<sigma>',m')"
+  assumes transition: "\<lbrakk> \<sigma> = all_states ! i; \<sigma>' = all_states ! (i + 1); m = all_messages ! i; m' = all_messages ! (i + 1) \<rbrakk> \<Longrightarrow> transition (\<sigma>,m) (\<sigma>',m')"
   and initial_state: "hd all_states = repeat (initial_server_state number_of_nodes) number_of_nodes"
   and initial_message: "hd all_messages = {}"
   and state_message_sync: "length all_states = length all_messages"
-
-abbreviation (in raft) transition_arrow (infix "\<rightarrow>" 50) where
-  "transition_arrow \<equiv> transition number_of_nodes"
-
-definition (in raft) transitions (infix "\<rightarrow>*" 50) where
-  "transitions \<equiv> rtranclp (transition number_of_nodes)"
-
-lemma (in raft) transitions_one: "a \<rightarrow> b \<Longrightarrow> a \<rightarrow>* b"
-  by (simp add: transitions_def)
-
-lemma (in raft) transisions_trans [trans]: "a \<rightarrow>* b \<Longrightarrow> b \<rightarrow>* c \<Longrightarrow> a \<rightarrow>* c"
-  using transitions_def by auto
-
-inductive (in raft) transitions_trace where
-TRT_empty: "transitions_trace (\<sigma>,m) (\<sigma>,m) [(\<sigma>,m)]"
-| TRT_step: "\<lbrakk> transitions_trace (\<sigma>,m) (\<sigma>',m') ts; transition number_of_nodes (\<sigma>',m') (\<sigma>'',m'') \<rbrakk> \<Longrightarrow> transitions_trace (\<sigma>,m) (\<sigma>'',m'') ((\<sigma>'',m'')#ts)"
 
 lemma (in raft) message_monotonicity: "i \<le> j \<Longrightarrow> all_messages ! i \<subseteq> all_messages ! j"
 proof-
@@ -54,7 +38,7 @@ proof-
         ultimately have "all_messages ! i \<subseteq> all_messages ! (j - 1)"
           using \<open>\<And>y j i. \<lbrakk>y < x; y = j - i; i \<le> j\<rbrakk> \<Longrightarrow> all_messages ! i \<subseteq> all_messages ! j\<close> \<open>x = Suc x'\<close> by blast
 
-        have "transition number_of_nodes (all_states ! (j - 1), all_messages ! (j - 1)) (all_states ! j, all_messages ! j)"
+        have "transition (all_states ! (j - 1), all_messages ! (j - 1)) (all_states ! j, all_messages ! j)"
           by (metis One_nat_def \<open>i \<le> j - 1\<close> \<open>x = Suc x'\<close> \<open>x = j - i\<close> diff_Suc_1 diff_is_0_eq diff_zero le_add_diff_inverse2 le_cases raft.transition raft_axioms)
         hence "all_messages ! (j - 1) \<subseteq> all_messages ! j"
           by (simp add: transition_message_monotonicity)
@@ -83,8 +67,7 @@ proof-
     })"
     apply (rule transitions_one)
     apply (cut_tac TR_start_election
-        [where N = number_of_nodes
-          , where ms = "hd all_messages"
+        [where ms = "hd all_messages"
           , where \<sigma> = "[initial_server_state 3, initial_server_state 3, initial_server_state 3]"
           , where target = "0"
           , where index = "log_index 0"
@@ -126,8 +109,7 @@ proof-
     })"
     apply (rule transitions_one)
     apply (cut_tac TR_request_vote_resp
-        [where N = number_of_nodes 
-          , where \<sigma> = "[initial_server_state 3\<lparr>currentTerm := election_term (Suc (election_term_of (currentTerm (initial_server_state 3)))), votedFor := Some (node 0)\<rparr>, initial_server_state 3, initial_server_state 3]"
+        [where \<sigma> = "[initial_server_state 3\<lparr>currentTerm := election_term (Suc (election_term_of (currentTerm (initial_server_state 3)))), votedFor := Some (node 0)\<rparr>, initial_server_state 3, initial_server_state 3]"
           , where ms = "{ message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1), message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1) }"
           , where \<sigma>' = "[initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>, initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>, initial_server_state 3]"
           , where resp = "message (node 1) (node 0) (request_vote_response True) (election_term 1)"
@@ -137,6 +119,7 @@ proof-
     apply (simp add: assms initial_state insert_commute numeral_3_eq_3)
     defer
     apply (simp add: initial_state assms initial_server_state_def repeat_nth)
+    apply simp
     apply (simp add: ExReq_def initial_state initial_server_state_def)
   proof-
     have "\<And>req. req = message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1)
@@ -174,8 +157,7 @@ proof-
     })"
     apply (rule transitions_one)
     apply (cut_tac TR_request_vote_resp
-        [where N = number_of_nodes 
-          , where \<sigma> = "[initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>, initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>, initial_server_state 3]"
+        [where \<sigma> = "[initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>, initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>, initial_server_state 3]"
           , where ms = "{message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),message (node 1) (node 0) (request_vote_response True) (election_term 1)}"
           , where \<sigma>' = "[initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>,initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>,initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>]"
           , where resp = "message (node 2) (node 0) (request_vote_response True) (election_term 1)"
@@ -185,6 +167,7 @@ proof-
     apply (simp add: assms initial_state insert_commute numeral_3_eq_3)
     defer
     apply (simp add: initial_state assms initial_server_state_def repeat_nth numeral_2_eq_2)
+    apply simp
     apply (simp add: ExReq_def initial_state initial_server_state_def)
   proof-
     have "\<And>req. req = message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1)
@@ -256,8 +239,7 @@ proof-
     })" (is "\<dots> \<rightarrow>* (?state, ?messages)")
     apply (rule transitions_one)
     apply (cut_tac TR_promote_to_leader
-        [where N = number_of_nodes
-          , where \<sigma> = "[initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>,initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>,initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>]"
+        [where \<sigma> = "[initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0)\<rparr>,initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>,initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>]"
           , where ms = "{message (node 0) (node 1) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),message (node 0) (node 2) (request_vote (node 0) (log_index 0) (election_term 0)) (election_term 1),message (node 1) (node 0) (request_vote_response True) (election_term 1),message (node 2) (node 0) (request_vote_response True) (election_term 1)}"
           , where target = "0"
           , where \<sigma>' = "[initial_server_state 3 \<lparr>currentTerm := increment_election_term (currentTerm (hd all_states ! 0)), votedFor := Some (node 0), state := leader\<rparr>,initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>,initial_server_state 3 \<lparr>votedFor := Some (node 0)\<rparr>]"
@@ -271,7 +253,7 @@ proof-
       by simp
     ultimately have "card {s. s = node 1 \<or> s = node 2} = 2"
       by simp
-    thus "3 < 2 * card {s. s = node (Suc 0) \<or> s = node 2}"
+    thus "Suc (Suc (Suc 0)) < 2 * card {s. s = node (Suc 0) \<or> s = node 2}"
       by simp
   qed
   finally have "(hd all_states, hd all_messages) \<rightarrow>* (?state, ?messages)" "state (?state ! 0) = leader"

@@ -78,7 +78,7 @@ definition ExReq where
 definition majority where
   "majority n t \<equiv> 2 * t > n"
 
-inductive transition :: "nat \<Rightarrow> server_state list \<times> message set \<Rightarrow> server_state list \<times> message set \<Rightarrow> bool" where
+inductive transition :: "server_state list \<times> message set \<Rightarrow> server_state list \<times> message set \<Rightarrow> bool" (infix "\<rightarrow>" 50) where
 (* Assumption: all RequestVote messages to followers are sent at once. Is it appropriate to assume this? *)
 TR_start_election: 
   "\<lbrakk> \<sigma>' = update target ((\<sigma> ! target) \<lparr>
@@ -86,9 +86,10 @@ TR_start_election:
     votedFor := Some (node target)
    \<rparr>) \<sigma>
    ; (index, term) = get_last_log_info (log (\<sigma>' ! target))
+   ; target < length \<sigma>
    ; messages = {message (node target) (node i) (request_vote (node target) index term) (currentTerm (\<sigma>' ! target)) | i. i \<in> {0..length \<sigma> - 1} \<and> i \<noteq> target}
    \<rbrakk>
-  \<Longrightarrow> transition N (\<sigma>, ms) (\<sigma>', ms \<union> messages)"
+  \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms \<union> messages)"
 | TR_request_vote_resp:
   "\<lbrakk> resp = message (node m) (node r) (request_vote_response vg) t
   ; ExReq resp (\<lambda>req. \<exists>candidateId lastLogIndex lastLogTerm. payload req = request_vote candidateId lastLogIndex lastLogTerm 
@@ -96,34 +97,40 @@ TR_start_election:
     \<and> vg = (if sender_term req < currentTerm (\<sigma> ! r) then False
             else (votedFor (\<sigma> ! r) = None \<or> votedFor (\<sigma> ! r) = Some candidateId) \<and> log_up_to_date (log (\<sigma> ! r)) lastLogIndex lastLogTerm)
     \<and> (votedFor (\<sigma> ! m) = Some s \<or> votedFor (\<sigma> ! m) = None)) 
-  ; \<sigma>' = update m ((\<sigma> ! m) \<lparr> votedFor := Some s \<rparr>) \<sigma> \<rbrakk>
-  \<Longrightarrow> transition N (\<sigma>, ms) (\<sigma>', ms \<union> {resp})"
+  ; \<sigma>' = update m ((\<sigma> ! m) \<lparr> votedFor := Some s \<rparr>) \<sigma>
+  ; m < length \<sigma>
+  \<rbrakk>
+  \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms \<union> {resp})"
 | TR_promote_to_leader:
   "\<lbrakk> \<sigma>' = update target ((\<sigma> ! target) \<lparr> state := leader \<rparr>) \<sigma>
-  ; majority N (card {s. \<exists>m \<in> ms. m = message s (node target) (request_vote_response True) (currentTerm (\<sigma> ! target))})
+  ; majority (length \<sigma>) (card {s. \<exists>m \<in> ms. m = message s (node target) (request_vote_response True) (currentTerm (\<sigma> ! target))})
+  ; target < length \<sigma>
   \<rbrakk>
-  \<Longrightarrow> transition N (\<sigma>, ms) (\<sigma>', ms)"
+  \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms)"
 | TR_append_entry:
   "\<lbrakk> m = message (node s) r (append_entry (node s) (log_index (length (log (\<sigma> ! s)) - 1)) (log (\<sigma> ! s))) (currentTerm (\<sigma> ! s))
   ; state (\<sigma> ! s) = leader
-  \<rbrakk> \<Longrightarrow> transition N (\<sigma>, ms) (\<sigma>, ms \<union> {m})"
+  ; s < length \<sigma>
+  \<rbrakk> \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>, ms \<union> {m})"
 (* 
    This algorithm for AppendEntry is different from the original paper;
    leader is supposed to send all logs in the state for the simplicity (no need to calculate diffs for merging and leader retries)
  *)
 | TR_append_entry_resp:
-  "\<lbrakk> resp = message s (node r) (append_entry_response success) t
+  "\<lbrakk> resp = message (node s) (node r) (append_entry_response success) t
   ; ExReq resp (\<lambda>req. \<exists>leadersLog. payload req = append_entry _ _ leadersLog
     \<and> req \<in> ms
     \<and> success = (if sender_term req < currentTerm (\<sigma> ! r) then False
                  else if \<not> log_up_to_date (log (\<sigma> ! r)) prevLogIndex prevLogTerm then False
-                 else True)
-    \<and> \<sigma>' ! r = (\<sigma> ! m) \<lparr> log := leadersLog \<rparr>) \<rbrakk>
-  \<Longrightarrow> transition N (\<sigma>, ms) (\<sigma>', ms \<union> {resp})"
+                 else True))
+  ; \<sigma>' = update s ((\<sigma> ! s) \<lparr> log := leadersLog \<rparr>) \<sigma>
+  ; s < length \<sigma>
+  \<rbrakk>
+  \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms \<union> {resp})"
 
-lemma transition_message_monotonicity: "transition N (\<sigma>, m) (\<sigma>', m') \<Longrightarrow> m \<subseteq> m'"
+lemma transition_message_monotonicity: "(\<sigma>, m) \<rightarrow> (\<sigma>', m') \<Longrightarrow> m \<subseteq> m'"
 proof-
-  assume hyp: "transition N (\<sigma>,m) (\<sigma>',m')"
+  assume hyp: "transition (\<sigma>,m) (\<sigma>',m')"
 
   have "(\<lambda>(_, m). \<lambda>(_, m'). m \<subseteq> m') (\<sigma>,m) (\<sigma>', m')"
     apply (induct rule: transition.induct [OF hyp])
@@ -132,5 +139,15 @@ proof-
   thus "m \<subseteq> m'"
     by simp
 qed
+
+definition transitions (infix "\<rightarrow>*" 50) where
+  "transitions \<equiv> rtranclp transition"
+
+lemma transitions_one: "a \<rightarrow> b \<Longrightarrow> a \<rightarrow>* b"
+  by (simp add: transitions_def)
+
+lemma transisions_trans [trans]: "a \<rightarrow>* b \<Longrightarrow> b \<rightarrow>* c \<Longrightarrow> a \<rightarrow>* c"
+  using transitions_def
+  by (metis rtranclp_trans)
 
 end

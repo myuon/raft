@@ -14,14 +14,13 @@ lemma (in raft) valid_params_length_previous: "valid_params (n + 1) i \<Longrigh
 lemma (in raft) transition_previous: "n > 0 \<Longrightarrow> (all_states ! (n - 1), all_messages ! (n - 1)) \<rightarrow> (all_states ! n, all_messages ! n)"
   by (simp add: transition)
 
-lemma state_length_invariant_for_transition: "transition N (\<sigma>, m) (\<sigma>', m') \<Longrightarrow> length \<sigma> = length \<sigma>'"
+lemma state_length_invariant_for_transition: "transition (\<sigma>, m) (\<sigma>', m') \<Longrightarrow> length \<sigma> = length \<sigma>'"
   apply (cases rule: transition.cases)
-  apply simp
-  apply simp
+  apply simp+
   sorry
 
 lemma leader_promote_inversion_for_transition:
-  "\<lbrakk> i < length \<sigma>; transition N (\<sigma>, ms) (\<sigma>', ms'); state (\<sigma> ! i) \<noteq> leader; state (\<sigma>' ! i) = leader \<rbrakk> \<Longrightarrow> majority N (card {s. \<exists>m \<in> ms. m = message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i))})"
+  "\<lbrakk> i < length \<sigma>; transition (\<sigma>, ms) (\<sigma>', ms'); state (\<sigma> ! i) \<noteq> leader; state (\<sigma>' ! i) = leader \<rbrakk> \<Longrightarrow> majority N (card {s. \<exists>m \<in> ms. m = message s (node i) (request_vote_response True) (currentTerm (\<sigma> ! i))})"
   apply (cases rule: transition.cases)
   apply simp_all
   apply (simp add: update_nth_nonupdated)
