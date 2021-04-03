@@ -72,16 +72,18 @@ definition initial_server_state where
     matchIndex = repeat (log_index 0) n
   \<rparr>"
 
+definition ExReqProps where
+  "ExReqProps resp P req \<equiv> P req \<and> respond_to resp req"
+
 definition ExReq where
-  "ExReq resp P \<equiv> Ex (\<lambda>req. P req \<and> respond_to resp req)"
+  "ExReq resp P \<equiv> Ex (ExReqProps resp P)"
 
 definition majority where
   "majority n t \<equiv> 2 * t > n"
 
 (* Assumption: all RequestVote messages to followers are sent at once. Is it appropriate to assume this? *)
 definition TR_condition_start_election where
-  "TR_condition_start_election \<sigma> \<sigma>' ms ms' \<equiv>
-     \<exists>target.
+  "TR_condition_start_election \<sigma> \<sigma>' ms ms' target \<equiv>
      let (index, term) = get_last_log_info (log (\<sigma>' ! target)) in
      target < length \<sigma>
      \<and> \<sigma>' = update target ((\<sigma> ! target) \<lparr>
@@ -91,8 +93,7 @@ definition TR_condition_start_election where
      \<and> ms' = ms \<union> {message (node target) (node i) (request_vote (node target) index term) (currentTerm (\<sigma>' ! target)) | i. i \<in> {0..length \<sigma> - 1} \<and> i \<noteq> target}"
 
 definition TR_condition_request_vote_resp where
-  "TR_condition_request_vote_resp \<sigma> \<sigma>' ms ms' \<equiv>
-     \<exists>m r s t vg.
+  "TR_condition_request_vote_resp \<sigma> \<sigma>' ms ms' m r s t vg \<equiv>
      let resp = message (node m) (node r) (request_vote_response vg) t in
      (ExReq resp (\<lambda>req. \<exists>candidateId lastLogIndex lastLogTerm. payload req = request_vote candidateId lastLogIndex lastLogTerm
        \<and> req \<in> ms
@@ -104,16 +105,14 @@ definition TR_condition_request_vote_resp where
      \<and> ms' = ms \<union> {resp}"
 
 definition TR_condition_promote_to_leader where
-  "TR_condition_promote_to_leader \<sigma> \<sigma>' ms ms' \<equiv>
-    \<exists>target.
+  "TR_condition_promote_to_leader \<sigma> \<sigma>' ms ms' target \<equiv>
     majority (length \<sigma>) (card {s. \<exists>m \<in> ms. m = message s (node target) (request_vote_response True) (currentTerm (\<sigma> ! target))})
     \<and> target < length \<sigma>
     \<and> \<sigma>' = update target ((\<sigma> ! target) \<lparr> state := leader \<rparr>) \<sigma>
     \<and> ms' = ms"
 
 definition TR_condition_append_entry where
-  "TR_condition_append_entry \<sigma> \<sigma>' ms ms' \<equiv>
-    \<exists>s r.
+  "TR_condition_append_entry \<sigma> \<sigma>' ms ms' s r \<equiv>
     let m = message (node s) r (append_entry (node s) (log_index (length (log (\<sigma> ! s)) - 1)) (log (\<sigma> ! s))) (currentTerm (\<sigma> ! s)) in
     state (\<sigma> ! s) = leader
     \<and> s < length \<sigma>
@@ -125,8 +124,7 @@ definition TR_condition_append_entry where
    leader is supposed to send all logs in the state for the simplicity (no need to calculate diffs for merging and leader retries)
  *)
 definition TR_condition_append_entry_resp where
-  "TR_condition_append_entry_resp \<sigma> \<sigma>' ms ms' \<equiv>
-    \<exists>leadersLog prevLogTerm prevLogIndex t success r s.
+  "TR_condition_append_entry_resp \<sigma> \<sigma>' ms ms' leadersLog prevLogTerm prevLogIndex t success r s \<equiv>
     let resp = message (node s) (node r) (append_entry_response success) t in
     ExReq resp (\<lambda>req. \<exists>leaderId leaderCommit. payload req = append_entry leaderId leaderCommit leadersLog
       \<and> req \<in> ms
@@ -138,11 +136,11 @@ definition TR_condition_append_entry_resp where
     \<and> ms' = ms \<union> {resp}"
 
 inductive transition :: "server_state list \<times> message set \<Rightarrow> server_state list \<times> message set \<Rightarrow> bool" (infix "\<rightarrow>" 50) where
-TR_start_election: "TR_condition_start_election \<sigma> \<sigma>' ms ms' \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms')"
-| TR_request_vote_resp: "TR_condition_request_vote_resp \<sigma> \<sigma>' ms ms' \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms')"
-| TR_promote_to_leader: "TR_condition_promote_to_leader \<sigma> \<sigma>' ms ms' \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms')"
-| TR_append_entry: "TR_condition_append_entry \<sigma> \<sigma>' ms ms' \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms')"
-| TR_append_entry_resp: "TR_condition_append_entry_resp \<sigma> \<sigma>' ms ms' \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms')"
+TR_start_election: "TR_condition_start_election \<sigma> \<sigma>' ms ms' target \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms')"
+| TR_request_vote_resp: "TR_condition_request_vote_resp \<sigma> \<sigma>' ms ms' m r s t vg \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms')"
+| TR_promote_to_leader: "TR_condition_promote_to_leader \<sigma> \<sigma>' ms ms' target \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms')"
+| TR_append_entry: "TR_condition_append_entry \<sigma> \<sigma>' ms ms' s r \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms')"
+| TR_append_entry_resp: "TR_condition_append_entry_resp \<sigma> \<sigma>' ms ms' leadersLog prevLogTerm prevLogIndex t success r s \<Longrightarrow> transition (\<sigma>, ms) (\<sigma>', ms')"
 
 lemma transition_message_monotonicity: "(\<sigma>, m) \<rightarrow> (\<sigma>', m') \<Longrightarrow> m \<subseteq> m'"
 proof-
