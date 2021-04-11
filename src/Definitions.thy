@@ -67,12 +67,23 @@ begin
 definition
   "i < j \<longleftrightarrow> election_term_of i < election_term_of j"
 
+definition
+  "i \<le> j \<longleftrightarrow> election_term_of i \<le> election_term_of j"
+
 instance ..
 
 end
 
 fun increment_election_term where
   "increment_election_term t = election_term (election_term_of t + 1)"
+
+lemma increment_election_term_greater_or_eq: "t < election_term (Suc (election_term_of t))"
+  apply (cases t)
+  apply simp
+  by (simp add: less_election_term_def)
+
+lemma increment_election_term_greater: "t \<le> election_term (Suc (election_term_of t))"
+  using less_eq_election_term_def by force
 
 datatype node = node (node_of: nat)
 

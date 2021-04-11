@@ -25,6 +25,41 @@ proof-
     sorry
 qed
 
+lemma (in raft) currentTerm_monotonicity: "\<lbrakk> valid_params n i; m < n \<rbrakk> \<Longrightarrow> currentTerm (all_states ! m ! i) \<le> currentTerm (all_states ! n ! i)"
+proof-
+  { fix k
+    have "\<lbrakk> k = n - m; valid_params n i; m < n \<rbrakk> \<Longrightarrow> currentTerm (all_states ! m ! i) \<le> currentTerm (all_states ! n ! i)"
+      apply (induct k arbitrary: n m)
+      apply simp
+    proof-
+      fix k n m
+      assume "(\<And>n m. k = n - m \<Longrightarrow> valid_params n i \<Longrightarrow> m < n \<Longrightarrow> currentTerm (all_states ! m ! i) \<le> currentTerm (all_states ! n ! i))"
+        "Suc k = n - m" "valid_params n i" "m < n"
+      have "Suc k + m = n"
+        by (simp add: \<open>Suc k = n - m\<close> \<open>m < n\<close> less_imp_le)
+      hence "k + Suc m = n"
+        by simp
+      hence "k = n - Suc m"
+        by simp
+
+      have "(all_states ! m, all_messages ! m) \<rightarrow> (all_states ! (Suc m), all_messages ! (Suc m))"
+        using transition by auto
+      hence "currentTerm (all_states ! m ! i) \<le> currentTerm (all_states ! (Suc m) ! i)"
+        by (metis \<open>m < n\<close> \<open>valid_params n i\<close> raft.valid_params_def raft_axioms state_length_invariant transition_currentTerm_monotonicity valid_params_length_smaller)
+
+      have "currentTerm (all_states ! (Suc m) ! i) \<le> currentTerm (all_states ! n ! i)"
+        by (metis Suc_lessI \<open>\<And>na m. \<lbrakk>k = na - m; valid_params na i; m < na\<rbrakk> \<Longrightarrow> currentTerm (all_states ! m ! i) \<le> currentTerm (all_states ! na ! i)\<close> \<open>k = n - Suc m\<close> \<open>m < n\<close> \<open>valid_params n i\<close> eq_imp_le less_eq_election_term_def)
+
+      show "currentTerm (all_states ! m ! i) \<le> currentTerm (all_states ! n ! i)"
+        by (meson \<open>currentTerm (all_states ! Suc m ! i) \<le> currentTerm (all_states ! n ! i)\<close> \<open>currentTerm (all_states ! m ! i) \<le> currentTerm (all_states ! Suc m ! i)\<close> le_trans less_eq_election_term_def)
+    qed
+  }
+  hence "\<And>k. \<lbrakk> k = n - m; valid_params n i; m < n \<rbrakk> \<Longrightarrow> currentTerm (all_states ! m ! i) \<le> currentTerm (all_states ! n ! i)" by simp
+
+  show "\<lbrakk> valid_params n i; m < n \<rbrakk> \<Longrightarrow> currentTerm (all_states ! m ! i) \<le> currentTerm (all_states ! n ! i)"
+    by (meson \<open>\<And>k. \<lbrakk>k = n - m; valid_params n i; m < n\<rbrakk> \<Longrightarrow> currentTerm (all_states ! m ! i) \<le> currentTerm (all_states ! n ! i)\<close>)
+qed
+
 lemma (in raft) leader_has_promotion_point_in_past:
   assumes "state (all_states ! n ! i) = leader" "valid_params n i"
   obtains m where "m < n" "state (all_states ! m ! i) \<noteq> leader" "state (all_states ! (m + 1) ! i) = leader" "currentTerm (all_states ! m ! i) = currentTerm (all_states ! n ! i)"

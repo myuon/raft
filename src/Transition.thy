@@ -284,6 +284,54 @@ lemma transition_message_preserves_finite: "\<lbrakk> (\<sigma>,m) \<rightarrow>
   apply (simp add: TR_condition_append_entry_resp_def)
   by (metis finite_insert)
 
+lemma transition_currentTerm_monotonicity: "\<lbrakk> i < length \<sigma>; (\<sigma>,m) \<rightarrow> (\<sigma>',m') \<rbrakk> \<Longrightarrow> currentTerm (\<sigma> ! i) \<le> currentTerm (\<sigma>' ! i)"
+  apply (cases rule: transition.cases)
+  apply simp_all
+proof-
+  fix \<sigma>'' \<sigma>''' ms ms' target
+  show "i < length \<sigma> \<Longrightarrow>
+       (\<sigma>, m) \<rightarrow> (\<sigma>', m') \<Longrightarrow>
+       (\<sigma>, m) = (\<sigma>'', ms) \<Longrightarrow> (\<sigma>', m') = (\<sigma>''', ms') \<Longrightarrow> TR_condition_start_election \<sigma>'' \<sigma>''' ms ms' target \<Longrightarrow> currentTerm (\<sigma> ! i) \<le> currentTerm (\<sigma>' ! i)"
+    apply (simp add: TR_condition_start_election_def)
+    apply (cases "i = target")
+    apply simp
+    apply (cases "\<sigma>'' ! target")
+    apply simp
+    apply (simp add: increment_election_term_greater update_nth_updated)
+    by (simp add: less_eq_election_term_def update_nth_nonupdated)
+next
+  fix \<sigma>'' \<sigma>''' ms ms' ma r s t vg
+  show "i < length \<sigma> \<Longrightarrow>
+       (\<sigma>, m) \<rightarrow> (\<sigma>', m') \<Longrightarrow>
+       (\<sigma>, m) = (\<sigma>'', ms) \<Longrightarrow>
+       (\<sigma>', m') = (\<sigma>''', ms') \<Longrightarrow> TR_condition_request_vote_resp \<sigma>'' \<sigma>''' ms ms' ma r s t vg \<Longrightarrow> currentTerm (\<sigma> ! i) \<le> currentTerm (\<sigma>' ! i)"
+    apply (simp add: TR_condition_request_vote_resp_def)
+    by (metis eq_iff less_eq_election_term_def select_convs(2) simps(12) surjective update_nth_nonupdated update_nth_updated)
+next
+  fix \<sigma>'' \<sigma>''' ms ms' target
+  show "i < length \<sigma> \<Longrightarrow>
+       (\<sigma>, m) \<rightarrow> (\<sigma>', m') \<Longrightarrow>
+       (\<sigma>, m) = (\<sigma>'', ms) \<Longrightarrow> (\<sigma>', m') = (\<sigma>''', ms') \<Longrightarrow> TR_condition_promote_to_leader \<sigma>'' \<sigma>''' ms ms' target \<Longrightarrow> currentTerm (\<sigma> ! i) \<le> currentTerm (\<sigma>' ! i)"
+    apply (simp add: TR_condition_promote_to_leader_def)
+    by (metis eq_iff less_eq_election_term_def select_convs(2) surjective update_convs(1) update_nth_nonupdated update_nth_updated)
+next
+  fix \<sigma>'' \<sigma>''' ms ms' s r
+  show "i < length \<sigma> \<Longrightarrow>
+       (\<sigma>, m) \<rightarrow> (\<sigma>', m') \<Longrightarrow>
+       (\<sigma>, m) = (\<sigma>'', ms) \<Longrightarrow> (\<sigma>', m') = (\<sigma>''', ms') \<Longrightarrow> TR_condition_append_entry \<sigma>'' \<sigma>''' ms ms' s r \<Longrightarrow> currentTerm (\<sigma> ! i) \<le> currentTerm (\<sigma>' ! i)"
+    apply (simp add: TR_condition_append_entry_def)
+    using less_eq_election_term_def by presburger
+next
+  fix \<sigma>'' \<sigma>''' ms ms' leadersLog prevLogTerm prevLogIndex t success r s
+  show "i < length \<sigma> \<Longrightarrow>
+       (\<sigma>, m) \<rightarrow> (\<sigma>', m') \<Longrightarrow>
+       (\<sigma>, m) = (\<sigma>'', ms) \<Longrightarrow>
+       (\<sigma>', m') = (\<sigma>''', ms') \<Longrightarrow>
+       TR_condition_append_entry_resp \<sigma>'' \<sigma>''' ms ms' leadersLog prevLogTerm prevLogIndex t success r s \<Longrightarrow> currentTerm (\<sigma> ! i) \<le> currentTerm (\<sigma>' ! i)"
+    apply (simp add: TR_condition_append_entry_resp_def)
+    by (metis (mono_tags, lifting) eq_iff less_eq_election_term_def select_convs(2) surjective update_convs(4) update_nth_nonupdated update_nth_updated)
+qed
+
 definition transitions (infix "\<rightarrow>*" 50) where
   "transitions \<equiv> rtranclp transition"
 
